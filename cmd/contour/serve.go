@@ -563,6 +563,7 @@ func (s *Server) doServe() error {
 		headersPolicy:                      contourConfiguration.Policy,
 		clientCert:                         clientCert,
 		fallbackCert:                       fallbackCert,
+		responseTimeout:                    timeouts.Response,
 		connectTimeout:                     timeouts.ConnectTimeout,
 		client:                             s.mgr.GetClient(),
 		metrics:                            contourMetrics,
@@ -1057,6 +1058,7 @@ type dagBuilderConfig struct {
 	headersPolicy                      *contour_v1alpha1.PolicyConfig
 	clientCert                         *types.NamespacedName
 	fallbackCert                       *types.NamespacedName
+	responseTimeout                    timeout.Setting
 	connectTimeout                     time.Duration
 	client                             client.Client
 	metrics                            *metrics.Metrics
@@ -1135,10 +1137,12 @@ func (s *Server) getDAGBuilder(dbc dagBuilderConfig) *dag.Builder {
 			ClientCertificate:             dbc.clientCert,
 			RequestHeadersPolicy:          &requestHeadersPolicyIngress,
 			ResponseHeadersPolicy:         &responseHeadersPolicyIngress,
+			ResponseTimeout:               dbc.responseTimeout,
 			ConnectTimeout:                dbc.connectTimeout,
 			MaxRequestsPerConnection:      dbc.maxRequestsPerConnection,
 			PerConnectionBufferLimitBytes: dbc.perConnectionBufferLimitBytes,
 			GlobalCircuitBreakerDefaults:  dbc.globalCircuitBreakerDefaults,
+			GlobalRateLimitService:        dbc.globalRateLimitService,
 			SetSourceMetadataOnRoutes:     true,
 			UpstreamTLS:                   dbc.upstreamTLS,
 		},

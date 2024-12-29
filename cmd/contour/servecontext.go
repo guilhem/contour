@@ -347,6 +347,9 @@ func (ctx *serveContext) convertToContourConfigurationSpec() contour_v1alpha1.Co
 	if len(ctx.Config.Timeouts.RequestTimeout) > 0 {
 		timeoutParams.RequestTimeout = ptr.To(ctx.Config.Timeouts.RequestTimeout)
 	}
+	if len(ctx.Config.Timeouts.ResponseTimeout) > 0 {
+		timeoutParams.ResponseTimeout = ptr.To(ctx.Config.Timeouts.ResponseTimeout)
+	}
 	if len(ctx.Config.Timeouts.ConnectionIdleTimeout) > 0 {
 		timeoutParams.ConnectionIdleTimeout = ptr.To(ctx.Config.Timeouts.ConnectionIdleTimeout)
 	}

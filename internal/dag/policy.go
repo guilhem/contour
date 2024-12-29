@@ -419,32 +419,32 @@ func ingressRetryPolicy(ingress *networking_v1.Ingress, log logrus.FieldLogger) 
 	return rp
 }
 
-func ingressTimeoutPolicy(ingress *networking_v1.Ingress, log logrus.FieldLogger) RouteTimeoutPolicy {
-	response := annotation.ContourAnnotation(ingress, "response-timeout")
-	if len(response) == 0 {
-		// Note: due to a misunderstanding the name of the annotation is
-		// request timeout, but it is actually applied as a timeout on
-		// the response body.
-		response = annotation.ContourAnnotation(ingress, "request-timeout")
-		if len(response) == 0 {
-			return RouteTimeoutPolicy{
-				ResponseTimeout:   timeout.DefaultSetting(),
-				IdleStreamTimeout: timeout.DefaultSetting(),
-			}
-		}
-	}
-	// if the request timeout annotation is present on this ingress
-	// construct and use the HTTPProxy timeout policy logic.
-	tp, _, err := timeoutPolicy(&contour_v1.TimeoutPolicy{
-		Response: response,
-	}, 0)
-	if err != nil {
-		log.WithError(err).Error("Error parsing response-timeout annotation, using the default value")
-		return RouteTimeoutPolicy{}
-	}
+// func ingressTimeoutPolicy(ingress *networking_v1.Ingress, log logrus.FieldLogger) RouteTimeoutPolicy {
+// 	response := annotation.ContourAnnotation(ingress, "response-timeout")
+// 	if len(response) == 0 {
+// 		// Note: due to a misunderstanding the name of the annotation is
+// 		// request timeout, but it is actually applied as a timeout on
+// 		// the response body.
+// 		response = annotation.ContourAnnotation(ingress, "request-timeout")
+// 		if len(response) == 0 {
+// 			return RouteTimeoutPolicy{
+// 				ResponseTimeout:   timeout.DefaultSetting(),
+// 				IdleStreamTimeout: timeout.DefaultSetting(),
+// 			}
+// 		}
+// 	}
+// 	// if the request timeout annotation is present on this ingress
+// 	// construct and use the HTTPProxy timeout policy logic.
+// 	tp, _, err := timeoutPolicy(&contour_v1.TimeoutPolicy{
+// 		Response: response,
+// 	}, 0)
+// 	if err != nil {
+// 		log.WithError(err).Error("Error parsing response-timeout annotation, using the default value")
+// 		return RouteTimeoutPolicy{}
+// 	}
 
-	return tp
-}
+// 	return tp
+// }
 
 func timeoutPolicy(tp *contour_v1.TimeoutPolicy, connectTimeout time.Duration) (RouteTimeoutPolicy, ClusterTimeoutPolicy, error) {
 	if tp == nil {

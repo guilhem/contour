@@ -155,6 +155,7 @@ func Defaults() contour_v1alpha1.ContourConfigurationSpec {
 
 type Timeouts struct {
 	Request                       timeout.Setting
+	Response                      timeout.Setting
 	ConnectionIdle                timeout.Setting
 	StreamIdle                    timeout.Setting
 	MaxConnectionDuration         timeout.Setting
@@ -177,6 +178,12 @@ func ParseTimeoutPolicy(timeoutParameters *contour_v1alpha1.TimeoutParameters) (
 		timeouts.Request, err = timeout.Parse(*timeoutParameters.RequestTimeout)
 		if err != nil {
 			return Timeouts{}, fmt.Errorf("failed to parse request timeout: %s", err)
+		}
+	}
+	if timeoutParameters.ResponseTimeout != nil {
+		timeouts.Response, err = timeout.Parse(*timeoutParameters.ResponseTimeout)
+		if err != nil {
+			return Timeouts{}, fmt.Errorf("failed to parse response timeout: %s", err)
 		}
 	}
 	if timeoutParameters.ConnectionIdleTimeout != nil {

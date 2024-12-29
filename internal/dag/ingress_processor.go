@@ -14,6 +14,7 @@
 package dag
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -24,9 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
+	contour_v1 "github.com/projectcontour/contour/apis/projectcontour/v1"
 	contour_v1alpha1 "github.com/projectcontour/contour/apis/projectcontour/v1alpha1"
 	"github.com/projectcontour/contour/internal/annotation"
 	"github.com/projectcontour/contour/internal/k8s"
+	"github.com/projectcontour/contour/internal/timeout"
 )
 
 // IngressProcessor translates Ingresses into DAG
@@ -52,6 +55,9 @@ type IngressProcessor struct {
 	// Response headers that will be set on all routes (optional).
 	ResponseHeadersPolicy *HeadersPolicy
 
+	// ResponseTimeout
+	ResponseTimeout timeout.Setting
+
 	// ConnectTimeout defines how long the proxy should wait when establishing connection to upstream service.
 	ConnectTimeout time.Duration
 
@@ -69,6 +75,9 @@ type IngressProcessor struct {
 
 	// GlobalCircuitBreakerDefaults defines global circuit breaker defaults.
 	GlobalCircuitBreakerDefaults *contour_v1alpha1.CircuitBreakers
+
+	// GlobalRateLimitService defines Envoy's Global RateLimit Service configuration.
+	GlobalRateLimitService *contour_v1alpha1.RateLimitServiceConfig
 
 	// UpstreamTLS defines the TLS settings like min/max version
 	// and cipher suites for upstream connections.
@@ -268,6 +277,14 @@ func (p *IngressProcessor) computeIngressRule(ing *networking_v1.Ingress, rule n
 
 // route builds a dag.Route for the supplied Ingress.
 func (p *IngressProcessor) route(ingress *networking_v1.Ingress, host, path string, pathType networking_v1.PathType, service *Service, clientCertSecret *Secret, serviceName string, servicePort int32, log logrus.FieldLogger) (*Route, error) {
+	if log == nil {
+		return nil, fmt.Errorf("no logger supplied")
+	}
+
+	if service == nil {
+		return nil, fmt.Errorf("no service supplied")
+	}
+
 	log = log.WithFields(logrus.Fields{
 		"name":      ingress.Name,
 		"namespace": ingress.Namespace,
@@ -278,6 +295,21 @@ func (p *IngressProcessor) route(ingress *networking_v1.Ingress, host, path stri
 	}
 	dynamicHeaders["CONTOUR_SERVICE_NAME"] = serviceName
 	dynamicHeaders["CONTOUR_SERVICE_PORT"] = strconv.Itoa(int(servicePort))
+
+	var rlp *RateLimitPolicy
+
+	if p.GlobalRateLimitService != nil {
+		rlpGlobal, err := globalRateLimitPolicy(p.GlobalRateLimitService.DefaultGlobalRateLimitPolicy)
+		if err != nil {
+			return nil, fmt.Errorf("error creating global rate limit policy: %w", err)
+		}
+
+		if rlpGlobal != nil {
+			rlp = &RateLimitPolicy{
+				Global: rlpGlobal,
+			}
+		}
+	}
 
 	// Get default headersPolicies
 	reqHP, err := headersPolicyService(p.RequestHeadersPolicy, nil, true, dynamicHeaders)
@@ -290,10 +322,11 @@ func (p *IngressProcessor) route(ingress *networking_v1.Ingress, host, path stri
 	}
 
 	r := &Route{
-		HTTPSUpgrade:  annotation.TLSRequired(ingress),
-		Websocket:     annotation.WebsocketRoutes(ingress)[path],
-		TimeoutPolicy: ingressTimeoutPolicy(ingress, log),
-		RetryPolicy:   ingressRetryPolicy(ingress, log),
+		HTTPSUpgrade:    annotation.TLSRequired(ingress),
+		Websocket:       annotation.WebsocketRoutes(ingress)[path],
+		TimeoutPolicy:   p.ingressTimeoutPolicy(ingress, log),
+		RetryPolicy:     ingressRetryPolicy(ingress, log),
+		RateLimitPolicy: rlp,
 		Clusters: []*Cluster{{
 			Upstream:                      service,
 			Protocol:                      service.Protocol,
@@ -362,6 +395,33 @@ func rulesFromSpec(spec networking_v1.IngressSpec) []networking_v1.IngressRule {
 		rules = append([]networking_v1.IngressRule{rule}, rules...)
 	}
 	return rules
+}
+
+func (p *IngressProcessor) ingressTimeoutPolicy(ingress *networking_v1.Ingress, log logrus.FieldLogger) RouteTimeoutPolicy {
+	response := annotation.ContourAnnotation(ingress, "response-timeout")
+	if len(response) == 0 {
+		// Note: due to a misunderstanding the name of the annotation is
+		// request timeout, but it is actually applied as a timeout on
+		// the response body.
+		response = annotation.ContourAnnotation(ingress, "request-timeout")
+		if len(response) == 0 {
+			return RouteTimeoutPolicy{
+				ResponseTimeout:   p.ResponseTimeout,
+				IdleStreamTimeout: timeout.DefaultSetting(),
+			}
+		}
+	}
+	// if the request timeout annotation is present on this ingress
+	// construct and use the HTTPProxy timeout policy logic.
+	rtp, _, err := timeoutPolicy(&contour_v1.TimeoutPolicy{
+		Response: response,
+	}, 0)
+	if err != nil {
+		log.WithError(err).Error("Error parsing response-timeout annotation, using the default value")
+		return RouteTimeoutPolicy{}
+	}
+
+	return rtp
 }
 
 // defaultBackendRule returns an IngressRule that represents the IngressBackend.

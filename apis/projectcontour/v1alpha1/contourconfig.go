@@ -577,6 +577,10 @@ type TimeoutParameters struct {
 	// +optional
 	RequestTimeout *string `json:"requestTimeout,omitempty"`
 
+	// ResponseTimeout
+	// See https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-field-config-route-v3-routeaction-timeout
+	ResponseTimeout *string `yaml:"responseTimeout,omitempty"`
+
 	// ConnectionIdleTimeout defines how long the proxy should wait while there are
 	// no active requests (for HTTP/1.1) or streams (for HTTP/2) before terminating
 	// an HTTP connection. Set to "infinity" to disable the timeout entirely.
